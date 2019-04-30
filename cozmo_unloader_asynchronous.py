@@ -377,7 +377,7 @@ class CozmoRos(object):
                                     offset= cozmo.util.Pose(-50,0,0,0,0,0,0)
                                     offset1=self.targetLocation1.pose.define_pose_relative_this(offset);
 
-                                    self.action=self._cozmo.go_to_pose(offset2)
+                                    self.action=self._cozmo.go_to_pose(offset1)
                                     self.action.wait_for_completed()
                                     if(self.action.has_succeeded):
                                         self.action=self._cozmo.place_object_on_ground_here(obj)
