@@ -129,6 +129,10 @@ class CozmoRos(object):
         self.topBackWallFound= False
         self.frontOfBoxFound= False
         self.topSideWallFound= False
+        self.readyToPickUp=False
+        self.deliveredCube1=None
+        self.deliveredCube2=None
+        self.deliveredCube3=None
         # tf
         self._tfb = TransformBroadcaster()
 
@@ -185,17 +189,17 @@ class CozmoRos(object):
 
         self.targetLocation1= self._cozmo.world.define_custom_cube(CustomObjectTypes.CustomType00,
                                                     CustomObjectMarkers.Hexagons3,
-                                                    5,45,45,True)
+                                                    5,63,63,True)
 
         self.targetLocation2= self._cozmo.world.define_custom_cube(CustomObjectTypes.CustomType01,
                                                     CustomObjectMarkers.Triangles2,
                                                     5,
-                                                    45,45,True)
+                                                    63,63,True)
 
         self.targetLocation3= self._cozmo.world.define_custom_cube(CustomObjectTypes.CustomType02,
                                                     CustomObjectMarkers.Circles2,
                                                     5,
-                                                    45,45,True)
+                                                    63,63,True)
         self.ramp= self._cozmo.world.define_custom_cube(CustomObjectTypes.CustomType03,
                                                     CustomObjectMarkers.Diamonds2,
                                                     1,
@@ -207,7 +211,7 @@ class CozmoRos(object):
         self.frontOfBox= self._cozmo.world.define_custom_cube(CustomObjectTypes.CustomType05,
                                                     CustomObjectMarkers.Hexagons2,
                                                     1,
-                                                    45,45,True)
+                                                    63,63,True)
         self.topSideWall= self._cozmo.world.define_custom_cube(CustomObjectTypes.CustomType06,
                                                     CustomObjectMarkers.Circles4,
                                                     1,
@@ -249,7 +253,7 @@ class CozmoRos(object):
         """
 
     def _resetHead(self) :
-        action1=self._cozmo.set_head_angle(radians(0.15), duration=0.1,in_parallel=True)
+        action1=self._cozmo.set_head_angle(radians(0.20), duration=0.1,in_parallel=True)
         action1.wait_for_completed()
 
         action2=self._cozmo.set_lift_height(0,duration=0.2, in_parallel=True)
@@ -360,60 +364,150 @@ class CozmoRos(object):
                             (x, y, z), q, now, 'cube_' + str(obj.object_id), self._odom_frame
                         )
                     # print('found cube '+str(obj.cube_id))
-                    if(self.topSideWallFound):#self.allLocFound
+                    if(self.allLocFound and self.readyToPickUp ):#self.allLocFound
                         num= obj.cube_id
 
                         # if(not self._checkDistToLoc(num,obj)):
                         #     print('cube '+ str(obj.cube_id)+ 'has already been delivered')
                         #     return
+                        if(not self._checkDistToSelf(obj)):
+                            print("cube too far")
+                            continue
+
                         self.action = self._cozmo.pickup_object(obj,True,False,2)#dock_with_cube(obj, approach_angle=cozmo.util.degrees(0), num_retries=2)
                         self.action.wait_for_completed()
                         if(self.action.has_succeeded):
                             if(num==1):
                                 if(self.loc1Pose.is_accurate):
                                     #
-                                    _loc=self.pose_with_distance_from_target(self._cozmo,self.targetLocation1,50)
-                                    print(_loc)
-                                    offset= cozmo.util.Pose(-50,0,0,0,0,0,0)
-                                    offset1=self.targetLocation1.pose.define_pose_relative_this(offset);
-
-                                    self.action=self._cozmo.go_to_pose(offset1)
-                                    self.action.wait_for_completed()
-                                    if(self.action.has_succeeded):
-                                        self.action=self._cozmo.place_object_on_ground_here(obj)
+                                    if(self.deliveredCube1==None):
+                                        offset= cozmo.util.Pose(-100,50,0,0,0,0,0)
+                                        offset1=self.targetLocation1.pose.define_pose_relative_this(offset);
+                                        self.action=self._cozmo.go_to_pose(offset1)
                                         self.action.wait_for_completed()
+                                        if(self.action.has_succeeded):
+                                            self.action=self._cozmo.place_object_on_ground_here(obj)
+                                            self.action.wait_for_completed()
+                                            self.readyToPickUp=False
+                                            self.deliveredCube1=obj
+
+                                    else:
+                                        offset= cozmo.util.Pose(-100,0,0,0,0,0,0)
+                                        offset1=self.targetLocation1.pose.define_pose_relative_this(offset);
+                                        self.action=self._cozmo.go_to_pose(offset1)
+                                        self.action.wait_for_completed()
+                                        if(self.action.has_succeeded):
+                                            self.action=self._cozmo.place_object_on_ground_here(obj)
+                                            self.action.wait_for_completed()
+                                            print("delivered 2nd cube")
+                                            self.readyToPickUp=False
+
+                                        else:
+                                            self.action2=self._cozmo.set_lift_height(0,duration=0.5, in_parallel=True)
+                                            self.action2.wait_for_completed()
+                                            self.readyToPickUp=False
+
+
                                 else:
                                     print("loc1 is no longer accurate, need to relocate")
+                                self.action=self._cozmo.go_to_pose(cozmo.util.Pose(0,0,0,0,0,0,0))
+                                self.action.wait_for_completed()
+                                self.allLocFound=False
+                                self.frontOfBoxFound=False
+                                self.loc1Found=False
+                                self.loc2Found=False
+                                self.loc3Found=False
+                                self._resetHead()
 
                             elif(num==2):
-                                if(self.topSideWall.pose.is_accurate):
+                                if(self.loc2Pose.is_accurate):
                                     #
-                                    _loc=self.pose_with_distance_from_target(self._cozmo,self.topSideWall,50)
-                                    print(_loc)
-                                    offset= cozmo.util.Pose(-50,0,0,0,0,0,0)
-                                    offset1=self.topSideWall.pose.define_pose_relative_this(offset);
-                                    self.action=self._cozmo.go_to_pose(offset1)
-                                    self.action.wait_for_completed()
-                                    self.action= self._cozmo.turn_in_place(degrees(-90))
-                                    self.action.wait_for_completed()
-                                    if(self.action.has_succeeded):
-                                        self.action=self._cozmo.place_object_on_ground_here(obj)
+                                    if(self.deliveredCube2==None):
+                                        offset= cozmo.util.Pose(-100,-50,0,0,0,0,0)
+                                        offset1=self.targetLocation2.pose.define_pose_relative_this(offset);
+                                        self.action=self._cozmo.go_to_pose(offset1)
                                         self.action.wait_for_completed()
+                                        if(self.action.has_succeeded):
+                                            self.action=self._cozmo.place_object_on_ground_here(obj)
+                                            self.action.wait_for_completed()
+                                            self.readyToPickUp=False
+                                            self.deliveredCube2=obj
+                                    else:
+                                        offset= cozmo.util.Pose(-100,50,0,0,0,0,0)
+                                        offset1=self.targetLocation2.pose.define_pose_relative_this(offset);
+                                        self.action=self._cozmo.go_to_pose(offset1)
+                                        self.action.wait_for_completed()
+                                        if(self.action.has_succeeded):
+                                            self.action=self._cozmo.place_object_on_ground_here(obj)
+                                            self.action.wait_for_complete()
+                                            print("delivered 2nd cube")
+                                        else:
+                                            self.action2=self._cozmo.set_lift_height(0,duration=0.5, in_parallel=True)
+                                            self.action2.wait_for_completed()
+                                            self.readyToPickUp=False
+
+
                                 else:
                                     print("the side wall is no longer accurate, need to relocate")
+                                self.action=self._cozmo.go_to_pose(cozmo.util.Pose(0,0,0,0,0,0,0))
+                                self.action.wait_for_completed()
+                                self.allLocFound=False
+                                self.frontOfBoxFound=False
+                                self.loc1Found=False
+                                self.loc2Found=False
+                                self.loc3Found=False
+                                self._resetHead()
 
 
                             elif(num==3):
-                                #self.action=self._cozmo.go_to_pose(self.loc2Pose)
-                                print("loop 3")
+                                if(self.loc3Pose.is_accurate):
+                                    #
+                                    if(self.deliveredCube3==None):
+                                        offset= cozmo.util.Pose(-120,-70,0,0,0,0,0)
+                                        offset1=self.targetLocation3.pose.define_pose_relative_this(offset);
+                                        self.action=self._cozmo.go_to_pose(offset1)
+                                        self.action.wait_for_completed()
+                                        if(self.action.has_succeeded):
+                                            self.action=self._cozmo.place_object_on_ground_here(obj)
+                                            self.action.wait_for_completed()
+                                            self.readyToPickUp=False
+                                            self.deliveredCube3=obj
+
+                                    else:
+                                        offset= cozmo.util.Pose(-120,70,0,0,0,0,0)
+                                        offset1=self.targetLocation3.pose.define_pose_relative_this(offset);
+                                        self.action=self._cozmo.go_to_pose(offset1)
+                                        self.action.wait_for_completed()
+                                        if(self.action.has_succeeded):
+                                            self.action=self._cozmo.place_object_on_ground_here(obj)
+                                            self.action.wait_for_completed()
+                                            self.readyToPickUp=False
+                                            print("delivered 2nd cube")
+                                        else:
+                                            self.action2=self._cozmo.set_lift_height(0,duration=0.5, in_parallel=True)
+                                            self.action2.wait_for_completed()
+                                            self.readyToPickUp=False
+
+                                else:
+                                    print("the side wall is no longer accurate, need to relocate")
+                                self.action=self._cozmo.go_to_pose(cozmo.util.Pose(0,0,0,0,0,0,0))
+                                self.action.wait_for_completed()
+                                self.allLocFound=False
+                                self.frontOfBoxFound=False
+                                self.loc1Found=False
+                                self.loc2Found=False
+                                self.loc3Found=False
+                                self._resetHead()
 
                             print("result:", self.action.result)
-                    return
+                        else:
+                            self.readyToPickUp=False
+
             except:
                 # print('OBJECT IS NOT A LIGHT CUBE')
                 if(obj==self._cozmo.world.charger):
-                    return
-                if(obj.object_type==CustomObjectTypes.CustomType03 and( not self.rampFound or not self.ramp.pose.is_accurate)):
+                    continue
+                if(obj.object_type==CustomObjectTypes.CustomType03 and( not self.rampFound )):
                     self.rampPose=obj.pose
                     self.rampFound=True
                     self._tfb.send_transform(
@@ -421,7 +515,7 @@ class CozmoRos(object):
                         )
                     print('comzmo has found ramp')
 
-                elif (obj.object_type==CustomObjectTypes.CustomType00 and (not self.loc1Found or not self.targetLocation1.pose.is_accurate)):
+                elif (obj.object_type==CustomObjectTypes.CustomType00 and (not self.loc1Found) ):
                     self.loc1Pose=obj.pose
                     self.targetLocation1=obj
                     self.loc1Found=True
@@ -430,7 +524,7 @@ class CozmoRos(object):
                         )
                     print('comzmo has found loc1')
 
-                elif (obj.object_type==CustomObjectTypes.CustomType01 and (not self.loc2Found or not self.targetLocation2.pose.is_accurate)):
+                elif (obj.object_type==CustomObjectTypes.CustomType01 and (not self.loc2Found )):
                     self.loc2Pose=obj.pose
                     self.loc2Found=True
                     self.targetLocation2=obj
@@ -439,7 +533,7 @@ class CozmoRos(object):
                             )
                     print('comzmo has found loc2')
 
-                elif (obj.object_type==CustomObjectTypes.CustomType02 and (not self.loc3Found or not self.targetLocation3.pose.is_accurate)):
+                elif (obj.object_type==CustomObjectTypes.CustomType02 and (not self.loc3Found) ):
                     self.loc3Pose=obj.pose
                     self.loc3Found=True
                     self.targetLocation3=obj
@@ -447,7 +541,7 @@ class CozmoRos(object):
                             (x, y, z), q, now, 'Endpoint 3', self._odom_frame
                         )
                     print('comzmo has found loc3')
-                elif (obj.object_type==CustomObjectTypes.CustomType04 and (not self.topBackWall or not self.topBackWall.pose.is_accurate)):
+                elif (obj.object_type==CustomObjectTypes.CustomType04 and (not self.topBackWall) ):
                     self.topBackPose=obj.pose
                     self.topBackWallFound=True
                     self.topBackWall=obj
@@ -456,10 +550,12 @@ class CozmoRos(object):
                             (x, y, z), q, now, 'topBackWall', self._odom_frame
                         )
                     print('comzmo has found topBackWall')
-                elif (obj.object_type==CustomObjectTypes.CustomType05 and( not self.frontOfBoxFound or not self.frontOfBox.pose.is_accurate)):
+                elif (obj.object_type==CustomObjectTypes.CustomType05 and( not self.frontOfBoxFound)):
                     self.frontOfBoxPose=obj.pose
                     self.frontOfBoxFound=True
                     self.frontOfBox=obj
+                    offset= cozmo.util.Pose(-190,-130,0,0,0,0,0)
+                    self.observationPose= self.frontOfBox.pose.define_pose_relative_this(offset)
                     self._tfb.send_transform(
                             (x, y, z), q, now, 'frontOfBox', self._odom_frame
                         )
@@ -475,7 +571,7 @@ class CozmoRos(object):
 
 
 
-            if(self.loc1Found and self.loc2Found and self.loc3Found ):
+            if(self.loc1Found and self.loc2Found and self.loc3Found and self.frontOfBoxFound ):
                 self.allLocFound=True
                 # if(self.frontOfBoxFound)
                     # self.go_to_pose
@@ -681,14 +777,37 @@ class CozmoRos(object):
             squared_dis=((p2[0]-p1[0])**2)+((p2[1]-p1[1])**2)
             dist=np.sqrt(squared_dis)
             #print(dist)
-        if(dist<60):
+        if(dist<100):
             return False
         else:
             return True
+    def _checkDistToSelf(self, obj):
+            p1=np.array([obj.pose.position.x,obj.pose.position.y,obj.pose.position.z])
+            p2=np.array([self._cozmo.pose.position.x,self._cozmo.pose.position.y,self._cozmo.pose.position.z])
+            dif= abs(self.frontOfBox.pose.position.x-obj.pose.position.x)
+            #print(self.loc1Pose.position)
+            #print(obj.pose.position)
+            squared_dis=((p2[0]-p1[0])**2)+((p2[1]-p1[1])**2)
+            dist=np.sqrt(squared_dis)
+            print(self.frontOfBox.pose.position)
+            print(obj.pose.position)
+            print (dist)
+            print ( dif)
+            if(dist>235):
+                return False
+            return True
+
     def _findlocations(self):
         if(self.allLocFound==False):
-            self._cozmo.turn_in_place(degrees(20),in_parallel=True)
-
+            self.action=self._cozmo.turn_in_place(degrees(20),in_parallel=True)
+            self.action.wait_for_completed()
+        else:
+            if(not self.readyToPickUp):
+                print("locs found moving to ready ")
+                self.action=self._cozmo.go_to_pose(self.observationPose)
+                self.action.wait_for_completed()
+                self.readyToPickUp=True
+                self._resetHead()
 
     def run(self, update_rate=10):
         """
@@ -702,6 +821,7 @@ class CozmoRos(object):
         self._resetHead()
         while not rospy.is_shutdown():
             self._publish_tf(update_rate)
+            self._findlocations()
             self._publish_image()
             self._publish_objects()
             self._publish_joint_state()
@@ -709,7 +829,6 @@ class CozmoRos(object):
             self._publish_battery()
             self._publish_odometry()
             self._publish_diagnostics()
-            #self._findlocations()
 
             # if(self.allLocFound==False):
             #     self._cozmo.turn_in_place(degrees(20))
